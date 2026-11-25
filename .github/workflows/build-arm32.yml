@@ -33,7 +33,15 @@ jobs:
       - name: Install cross-compilation deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
+          sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross libssl-dev:armhf pkg-config
+          # Create cross pkg-config wrapper
+          cat > /usr/local/bin/pkg-config-armv7 <<'EOF'
+          #!/bin/bash
+          export PKG_CONFIG_LIBDIR=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig
+          export PKG_CONFIG_SYSROOT_DIR=/
+          exec pkg-config "$@"
+          EOF
+          chmod +x /usr/local/bin/pkg-config-armv7
 
       - name: Configure cargo for armv7
         run: |
@@ -43,6 +51,13 @@ jobs:
           linker = "arm-linux-gnueabihf-gcc"
           runner = "qemu-arm -L /usr/arm-linux-gnueabihf"
           EOF
+          # Set cross-compilation env vars for openssl-sys and other -sys crates
+          echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc' >> $GITHUB_ENV
+          echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER=qemu-arm -L /usr/arm-linux-gnueabihf' >> $GITHUB_ENV
+          echo 'PKG_CONFIG_ALLOW_CROSS=1' >> $GITHUB_ENV
+          echo 'OPENSSL_DIR=/usr/lib/arm-linux-gnueabihf' >> $GITHUB_ENV
+          echo 'OPENSSL_LIB_DIR=/usr/lib/arm-linux-gnueabihf' >> $GITHUB_ENV
+          echo 'OPENSSL_INCLUDE_DIR=/usr/include' >> $GITHUB_ENV
 
       - name: Cache cargo
         uses: actions/cache@v4
