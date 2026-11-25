@@ -1,0 +1,117 @@
+name: Build ARM32 (armv7)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g., v1.1.0) or "latest" for master'
+        required: true
+        default: 'latest'
+      upload_artifacts:
+        description: 'Upload binaries as workflow artifacts'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  build-arm32:
+    name: Build armv7-unknown-linux-gnueabihf
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag != 'latest' && github.event.inputs.tag || '' }}
+          fetch-depth: 0
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-gnueabihf
+
+      - name: Install cross-compilation deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
+
+      - name: Configure cargo for armv7
+        run: |
+          mkdir -p .cargo
+          cat > .cargo/config.toml <<'EOF'
+          [target.armv7-unknown-linux-gnueabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          runner = "qemu-arm -L /usr/arm-linux-gnueabihf"
+          EOF
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-arm32-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-arm32-
+
+      - name: Build jcode (release)
+        run: |
+          cargo build --release --target armv7-unknown-linux-gnueabihf --bin jcode
+
+      - name: Build jcode-harness (release)
+        run: |
+          cargo build --release --target armv7-unknown-linux-gnueabihf --bin jcode-harness
+
+      - name: Verify binaries
+        run: |
+          file target/armv7-unknown-linux-gnueabihf/release/jcode
+          file target/armv7-unknown-linux-gnueabihf/release/jcode-harness
+          ./target/armv7-unknown-linux-gnueabihf/release/jcode --version || true
+          ./target/armv7-unknown-linux-gnueabihf/release/jcode-harness --version || true
+
+      - name: Package artifacts
+        if: ${{ github.event.inputs.upload_artifacts }}
+        run: |
+          mkdir -p dist
+          cp target/armv7-unknown-linux-gnueabihf/release/jcode dist/
+          cp target/armv7-unknown-linux-gnueabihf/release/jcode-harness dist/
+          tar -czf jcode-linux-armv7.tar.gz -C dist .
+          ls -lh jcode-linux-armv7.tar.gz
+
+      - name: Upload artifacts
+        if: ${{ github.event.inputs.upload_artifacts }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: jcode-linux-armv7
+          path: |
+            jcode-linux-armv7.tar.gz
+            dist/jcode
+            dist/jcode-harness
+          retention-days: 30
+
+      - name: Create release (if tag provided)
+        if: ${{ github.event.inputs.tag != 'latest' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: jcode ${{ github.event.inputs.tag }} (ARM32)
+          body: |
+            ARM32 (armv7-unknown-linux-gnueabihf) build for Termux/arm32 devices.
+
+            **Binaries:**
+            - `jcode` — main TUI
+            - `jcode-harness` — harness binary
+
+            **Install in Termux:**
+            ```bash
+            cd ~/bin
+            tar -xzf jcode-linux-armv7.tar.gz
+            chmod +x jcode jcode-harness
+            ```
+          files: |
+            jcode-linux-armv7.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
