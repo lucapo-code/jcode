@@ -16,7 +16,7 @@ on:
 jobs:
   build-arm32:
     name: Build armv7-unknown-linux-gnueabihf
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
       OPENSSL_DIR: /opt/openssl-armhf
@@ -75,9 +75,9 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: ${{ runner.os }}-cargo-arm32-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-arm32-u2404-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-arm32-
+            ${{ runner.os }}-cargo-arm32-u2404-
 
       - name: Build jcode (release)
         run: |
